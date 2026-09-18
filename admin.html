@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Name Admin</title>
+    <!-- Подключаем Supabase JS клиент -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --text-color: #ffffff;
+            --card-bg: #1e1e1e;
+            --accent-color: #2ea44f;
+            --border-color: #333;
+            --hover-color: #238636;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+        .admin-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+        }
+        h2 { margin-top: 0; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            background: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        .sizes-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+            gap: 8px;
+            margin-top: 5px;
+        }
+        .size-btn {
+            background: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 10px 5px;
+            text-align: center;
+            border-radius: 4px;
+            cursor: pointer;
+            user-select: none;
+            transition: 0.2s;
+        }
+        .size-btn.selected {
+            background: var(--accent-color);
+            border-color: var(--accent-color);
+            font-weight: bold;
+        }
+        .btn-submit {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 12px;
+            width: 100%;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .btn-submit:hover { background-color: var(--hover-color); }
+        #statusMessage { margin-top: 15px; text-align: center; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="admin-container">
+        <h2>Name Admin - Додати товар</h2>
+        
+        <div class="form-group">
+            <label>Бренд</label>
+            <select id="brand">
+                <option value="Nike">Nike</option>
+                <option value="Adidas">Adidas</option>
+                <option value="Puma">Puma</option>
+                <option value="New Balance">New Balance</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Назва товару</label>
+            <input type="text" id="title" placeholder="Наприклад: кросівки Air Force">
+        </div>
+
+        <div class="form-group">
+            <label>Артикул</label>
+            <input type="text" id="article" placeholder="Артикул товару">
+        </div>
+
+        <div class="form-group">
+            <label>Ціна (грн)</label>
+            <input type="number" id="price" placeholder="Ціна">
+        </div>
+
+        <div class="form-group">
+            <label>Категорія</label>
+            <select id="category">
+                <option value="Взуття">Взуття</option>
+                <option value="Одяг">Одяг</option>
+                <option value="Аксесуари">Аксесуари</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Виберіть доступні розміри</label>
+            <div class="sizes-grid" id="sizesContainer">
+                <!-- Динамические кнопки размеров генерируются скриптом -->
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Вибрати фото з галереї (можна кілька)</label>
+            <input type="file" id="imageFiles" multiple accept="image/*">
+        </div>
+
+        <div class="form-group">
+            <label>Посилання для замовлення в Telegram</label>
+            <input type="text" id="tg_link" placeholder="https://t.me/username/123">
+        </div>
+
+        <button class="btn-submit" onclick="saveProduct()">Зберегти товар</button>
+        <div id="statusMessage"></div>
+    </div>
+
+    <script>
+        // НОВЫЕ КЛЮЧИ И URL СУПАБЕЙС
+        const supabaseUrl = 'https://vvoksqrnlufjuzertrtc.supabase.co';
+        const supabaseKey = 'sb_publishable_G8ZyWx6NlIuSpHYyNMWj9w_9akbGtdK';
+        const supabaseClient = supabase.createClient(supabaseUrl, supabaseKey);
+
+        // Генерация кнопок размеров (например, обувная сетка от 35 до 46.5)
+        const sizesList = ["35", "35.5", "36", "36.5", "37", "37.5", "38", "38.5", "39", "39.5", "40", "40.5", "41", "41.5", "42", "42.5", "43", "43.5", "44", "44.5", "45", "45.5", "46", "46.5"];
+        const container = document.getElementById('sizesContainer');
+
+        sizesList.forEach(size => {
+            const btn = document.createElement('div');
+            btn.className = 'size-btn';
+            btn.innerText = size;
+            btn.onclick = () => btn.classList.toggle('selected');
+            container.appendChild(btn);
+        });
+
+        // Функция сохранения товара
+        async function saveProduct() {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.style.color = '#fff';
+            statusDiv.innerText = 'Збереження товару та завантаження фото...';
+
+            const brand = document.getElementById('brand').value;
+            const title = document.getElementById('title').value;
+            const article = document.getElementById('article').value;
+            const price = parseFloat(document.getElementById('price').value) || 0;
+            const category = document.getElementById('category').value;
+            const tg_link = document.getElementById('tg_link').value;
+
+            // Сбор выбранных размеров
+            const selectedSizes = [];
+            document.querySelectorAll('.size-btn.selected').forEach(btn => {
+                selectedSizes.push(btn.innerText);
+            });
+
+            // Загрузка картинок в Supabase Storage (бакет products-images)
+            const fileInput = document.getElementById('imageFiles');
+            const imageUrls = [];
+
+            if (fileInput.files.length > 0) {
+                for (let i = 0; i < fileInput.files.length; i++) {
+                    const file = fileInput.files[i];
+                    const fileName = `${Date.now()}_${file.name}`;
+
+                    const { data, error } = await supabaseClient.storage
+                        .from('products-images')
+                        .upload(fileName, file);
+
+                    if (error) {
+                        console.error('Помилка завантаження фото:', error);
+                    } else {
+                        // Получаем публичную ссылку на загруженный файл
+                        const { data: publicURLData } = supabaseClient.storage
+                            .from('products-images')
+                            .getPublicUrl(fileName);
+                        
+                        imageUrls.push(publicURLData.publicUrl);
+                    }
+                }
+            }
+
+            // Запись данных в таблицу products
+            const { error: insertError } = await supabaseClient
+                .from('products')
+                .insert([{
+                    brand,
+                    title,
+                    article,
+                    price,
+                    category,
+                    sizes: selectedSizes,
+                    images: imageUrls,
+                    tg_link
+                }]);
+
+            if (insertError) {
+                console.error('Помилка бази даних:', insertError);
+                statusDiv.style.color = '#ff6b6b';
+                statusDiv.innerText = 'Помилка при збереженні: ' + insertError.message;
+            } else {
+                statusDiv.style.color = '#2ea44f';
+                statusDiv.innerText = 'Товар успішно збережено!';
+                // Очистка формы
+                document.getElementById('title').value = '';
+                document.getElementById('article').value = '';
+                document.getElementById('price').value = '';
+                document.getElementById('tg_link').value = '';
+                document.querySelectorAll('.size-btn.selected').forEach(b => b.classList.remove('selected'));
+                fileInput.value = '';
+            }
+        }
+    </script>
+</body>
+</html>
